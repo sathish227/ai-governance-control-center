@@ -30,5 +30,3 @@ The app uses MSAL Browser with authorization code and PKCE, stores authenticatio
 - A public sample-only demo can leave `src/config.js` empty. The built `docs/` folder is ready for a static host; the Entra redirect URI must match the final URL if the tenant connection is enabled.
 - This repository is source code for a standalone browser app. It is **not** a ChatGPT Enterprise integration or a tenant-wide AI discovery product.
 - The 4 AI applications, control states, risk labels, and recommendations are synthetic. Enterprise application counts are not AI agent counts. A granted permission is not evidence that it was used. The live view does not assess delegated OAuth grants, Purview data access, or actual AI safety controls.
-
-The original project did not specify an open-source license. Choose a license and add a `LICENSE` file if you want to grant others reuse rights.
