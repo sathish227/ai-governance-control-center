@@ -1,8 +1,10 @@
 import { PublicClientApplication, InteractionRequiredAuthError } from '@azure/msal-browser';
-import { tenantId, clientId } from './config.js';
 
+import { tenantId, clientId } from './config.js';
 const configured = Boolean(tenantId && clientId);
 const scopes = ['Application.Read.All'];
+const agentScopes = ['AgentIdentity.Read.All'];
+const pendingAgentKey = 'governance-load-agent-identities';
 const graphOrigin = 'https://graph.microsoft.com';
 const redirectUri = new URL('./', window.location.href).href.split('#')[0];
 const byId = id => document.getElementById(id);
@@ -13,9 +15,11 @@ const pca = configured ? new PublicClientApplication({
   cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
 }) : null;
 let principals = [];
+let agentIdentities = [];
 byId('tenant-redirect-uri').textContent = redirectUri;
 if (!configured) {
   byId('tenant-connect').disabled = true;
+  byId('agent-load').disabled = true;
   setStatus('Sample mode. Set your tenant ID and client ID in src/config.js, then rebuild to enable Microsoft Graph.');
 }
 
@@ -24,24 +28,25 @@ function setStatus(message, error = false) {
   byId('tenant-status').classList.toggle('error', error);
 }
 
-async function token() {
+async function token(requestedScopes = scopes) {
   const account = pca.getActiveAccount() || pca.getAllAccounts()[0];
   if (!account) throw new Error('Sign in to your test tenant first.');
   try {
-    return (await pca.acquireTokenSilent({ scopes, account })).accessToken;
+    return (await pca.acquireTokenSilent({ scopes: requestedScopes, account })).accessToken;
   } catch (error) {
     if (error instanceof InteractionRequiredAuthError) {
-      await pca.acquireTokenRedirect({ scopes, account, redirectUri });
+      if (requestedScopes.includes('AgentIdentity.Read.All')) sessionStorage.setItem(pendingAgentKey, 'true');
+      await pca.acquireTokenRedirect({ scopes: requestedScopes, account, redirectUri });
       return null;
     }
     throw error;
   }
 }
 
-async function graphGet(pathOrUrl) {
+async function graphGet(pathOrUrl, requestedScopes = scopes) {
   const url = new URL(pathOrUrl, graphOrigin);
   if (url.origin !== graphOrigin || !url.pathname.startsWith('/v1.0/')) throw new Error('Unexpected Graph continuation URL.');
-  const accessToken = await token();
+  const accessToken = await token(requestedScopes);
   if (!accessToken) return null;
   const response = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken, Accept: 'application/json' } });
   if (!response.ok) {
@@ -52,12 +57,12 @@ async function graphGet(pathOrUrl) {
   return response.json();
 }
 
-async function collection(first, maxPages = 10) {
+async function collection(first, maxPages = 10, requestedScopes = scopes) {
   let next = first, pages = 0;
   const items = [];
   while (next && pages < maxPages) {
-    const data = await graphGet(next);
-    if (!data) return { items: [], truncated: false };
+    const data = await graphGet(next, requestedScopes);
+    if (!data) return { items: [], truncated: false, redirecting: true };
     items.push(...(data.value || []));
     next = data['@odata.nextLink'];
     pages++;
@@ -77,6 +82,7 @@ async function refresh() {
   byId('tenant-refresh').disabled = true;
   try {
     const result = await collection('/v1.0/servicePrincipals?$select=id,appId,displayName,servicePrincipalType,publisherName&$top=100', 20);
+    if (result.redirecting) return;
     principals = result.items.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
     byId('tenant-inventory').hidden = false;
     byId('tenant-detail').hidden = true;
@@ -89,6 +95,40 @@ async function refresh() {
     setStatus(error.message || 'Unable to load applications.', true);
   } finally {
     byId('tenant-refresh').disabled = false;
+  }
+}
+
+function setAgentStatus(message, error = false) {
+  byId('agent-status').textContent = message;
+  byId('agent-status').classList.toggle('error', error);
+}
+
+function renderAgents() {
+  const query = byId('agent-search').value.trim().toLocaleLowerCase();
+  const matches = agentIdentities.filter(a => [a.displayName, a.id, a.agentIdentityBlueprintId].some(value => String(value || '').toLocaleLowerCase().includes(query)));
+  byId('agent-table').innerHTML = matches.map(a => `<tr><td><strong>${escapeHtml(a.displayName || 'Unnamed agent')}</strong></td><td>${a.accountEnabled === true ? 'Enabled' : a.accountEnabled === false ? 'Disabled' : 'Not returned'}</td><td>${escapeHtml(a.createdDateTime || 'Not returned')}</td><td>${escapeHtml(a.id)}</td><td>${escapeHtml(a.agentIdentityBlueprintId || 'Not returned')}</td></tr>`).join('');
+  byId('agent-empty').hidden = matches.length > 0;
+}
+
+async function loadAgents() {
+  byId('agent-results').hidden = true;
+  if (!pca?.getActiveAccount()) {
+    setAgentStatus('Connect Entra ID first, then load agent identities.', true);
+    return;
+  }
+  byId('agent-load').disabled = true;
+  setAgentStatus('Loading Entra agent identities from Microsoft Graph…');
+  try {
+    const result = await collection('/v1.0/servicePrincipals/microsoft.graph.agentIdentity?$select=id,displayName,accountEnabled,createdDateTime,agentIdentityBlueprintId,servicePrincipalType&$top=100', 20, agentScopes);
+    if (result.redirecting) return;
+    agentIdentities = result.items.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+    renderAgents();
+    byId('agent-results').hidden = false;
+    setAgentStatus(`${agentIdentities.length} Entra agent identities loaded${result.truncated ? ' (partial list; more pages are available)' : ''}. This inventory covers agents with Entra agent identities.`);
+  } catch (error) {
+    setAgentStatus('Agent inventory could not be loaded. ' + (error.message || '') + ' Check delegated AgentIdentity.Read.All, admin consent, and the signed-in account’s Agent ID access (Agent ID Administrator for nonowners).', true);
+  } finally {
+    byId('agent-load').disabled = false;
   }
 }
 
@@ -153,6 +193,8 @@ byId('tenant-connect').addEventListener('click', async () => {
 });
 byId('tenant-refresh').addEventListener('click', refresh);
 byId('tenant-search').addEventListener('input', renderInventory);
+byId('agent-load').addEventListener('click', loadAgents);
+byId('agent-search').addEventListener('input', renderAgents);
 byId('tenant-table').addEventListener('click', event => {
   const id = event.target.closest('button[data-sp-id]')?.dataset.spId;
   if (id) showGrants(id);
@@ -178,7 +220,12 @@ byId('tenant-table').addEventListener('click', event => {
       window.showGovernanceView(window.governanceViews.includes(requestedView) ? requestedView : 'dashboard');
     }
     if (pca.getActiveAccount()) await refresh();
+    if (sessionStorage.getItem(pendingAgentKey) === 'true') {
+      sessionStorage.removeItem(pendingAgentKey);
+      await loadAgents();
+    }
   } catch (error) {
+    sessionStorage.removeItem(pendingAgentKey);
     window.showGovernanceView('tenant');
     setStatus(error.message || 'Sign-in could not be completed.', true);
   }
