@@ -46,6 +46,12 @@
           <div id="tenant-status" class="tenant-status" role="status">Add the SPA redirect URI in Entra before connecting.</div>
           <p class="tenant-setup">SPA redirect URI: <code id="tenant-redirect-uri"></code></p>
           <div id="tenant-inventory" hidden><div class="controls tenant-search"><input id="tenant-search" class="search" type="search" placeholder="Search enterprise applications" aria-label="Search tenant applications"></div><div class="card table-wrap"><table class="table"><thead><tr><th>Enterprise application</th><th>Type</th><th>Publisher</th><th></th></tr></thead><tbody id="tenant-table"></tbody></table><div id="tenant-empty" class="empty" hidden>No applications match your search.</div></div><div id="tenant-detail" class="card tenant-detail" hidden></div></div>
+          <div class="card tenant-detail">
+            <div class="detail-top"><div><h2>Entra agent identities</h2><p>Load the dedicated agent inventory separately from enterprise applications.</p></div><button id="agent-load" class="action">Load agent identities</button></div>
+            <div id="agent-status" class="tenant-status" role="status">Not loaded. Requires delegated AgentIdentity.Read.All and appropriate Entra access.</div>
+            <div id="agent-results" hidden><input id="agent-search" class="search tenant-search" type="search" placeholder="Search agent name, object ID, or blueprint ID" aria-label="Search Entra agent identities"><div class="table-wrap"><table class="table"><thead><tr><th>Agent identity</th><th>Account status</th><th>Created (UTC)</th><th>Object ID</th><th>Blueprint ID</th></tr></thead><tbody id="agent-table"></tbody></table><div id="agent-empty" class="empty" hidden>No matching Entra agent identities were returned.</div></div></div>
+            <p class="footnote">Lists Entra agent identities, not every agent in Agent 365. Enabled status does not prove recent activity. No live governance scores are calculated.</p>
+          </div>
           <p class="footnote">Live tenant data is shown only in this browser session. Names and grants come from Microsoft Graph; they do not establish that an application is an AI agent or has access to labeled files.</p>
         </section>
         <section id="applications" class="view" hidden>
