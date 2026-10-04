@@ -30,3 +30,11 @@ The app uses MSAL Browser with authorization code and PKCE, stores authenticatio
 - A public sample-only demo can leave `src/config.js` empty. The built `docs/` folder is ready for a static host; the Entra redirect URI must match the final URL if the tenant connection is enabled.
 - This repository is source code for a standalone browser app. It is **not** a ChatGPT Enterprise integration or a tenant-wide AI discovery product.
 - The 4 AI applications, control states, risk labels, and recommendations are synthetic. Enterprise application counts are not AI agent counts. A granted permission is not evidence that it was used. The live view does not assess delegated OAuth grants, Purview data access, or actual AI safety controls.
+
+## Entra agent identity inventory
+
+The Test tenant view now has a separate **Load agent identities** action. It queries `GET /v1.0/servicePrincipals/microsoft.graph.agentIdentity`; it does not infer agents from application names. Add Microsoft Graph **delegated** `AgentIdentity.Read.All` to your own registration and grant admin consent. Microsoft documents **Agent ID Administrator** as the supported role for nonowner delegated calls. Activate the role if your tenant uses PIM. Sign in to the tenant, then load the agent inventory to acquire a token for the extra read scope.
+
+The agent table shows display name, account enabled status, creation date, object ID, and blueprint ID, with local search. Authorization failures are shown as errors rather than a zero count. This covers Entra agent identities only; it is not a complete Agent 365 inventory, activity assessment, or live governance score.
+
+Reference: https://learn.microsoft.com/en-us/graph/api/agentidentity-list?view=graph-rest-1.0
